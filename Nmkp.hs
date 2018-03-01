@@ -12,7 +12,6 @@ data Grid = Grid {
 } deriving (Show)
 
 type GridPos = (Int, Int)
-type DisplayPos = (Float, Float)
 
 data Direction = Down
                | Up
@@ -154,13 +153,6 @@ swapTurn :: Battle -> Battle
 swapTurn battle@Battle{turn = DefenderTurn} = battle{turn = AttackerTurn, selectedAttack = 0}
 swapTurn battle@Battle{turn = AttackerTurn} = battle{turn = DefenderTurn, selectedAttack = 0}
 
-playAttacker :: Battle -> Battle
-playAttacker battle =
-    let battleAttackerTurn = swapTurn battle
-        attack = getSelectedAttack battleAttackerTurn
-        battle' = applyAttackToBattle attack battleAttackerTurn
-    in swapTurn battle'
-
 isMovementDone :: Move -> Bool
 isMovementDone (Done _) = True
 isMovementDone _        = False
@@ -180,7 +172,7 @@ applyOffsetFromDirection Down offset (x, y) = (x, y + offset)
 applyOffsetFromDirection Left offset (x, y) = (x - offset, y)
 applyOffsetFromDirection Right offset (x, y) = (x + offset, y)
 
-getDisplayPosFromMovement :: Grid -> Move -> DisplayPos
+getDisplayPosFromMovement :: Grid -> Move -> Point
 getDisplayPosFromMovement grid                    (Start _ start _) = gridToDisplayPos grid start
 getDisplayPosFromMovement grid                    (Done end) = gridToDisplayPos grid end
 getDisplayPosFromMovement grid@Grid{displayRatio} (Moving direction iteration start _) =
@@ -192,7 +184,7 @@ getDisplayPosFromMovement grid@Grid{displayRatio} (Moving direction iteration st
             _ -> offset
     in applyOffsetFromDirection direction displayOffset gridPositionInDisplay
 
-gridToDisplayPos :: Grid -> GridPos -> DisplayPos
+gridToDisplayPos :: Grid -> GridPos -> Point
 gridToDisplayPos Grid{..} (x, y) = (fromIntegral x', fromIntegral y')
     where
         x' = (-displayRatio * columns `div` 2) + x * displayRatio + displayRatio `div` 2
@@ -413,9 +405,10 @@ handleBattleInput :: Event -> World -> World
 handleBattleInput event world@World{battle = (Just Battle{bState = Challenge _})} = handleBattleChallengeInput event world
 handleBattleInput event world@World{battle = (Just Battle{bState = DefenderAttackChoose})} = handleBattleSelectionInput event world
 handleBattleInput event world@World{battle = (Just Battle{bState = AnnounceAttack _ _})} = handleBattleAttackAnnounce event world
-handleBattleInput event world@World{battle = (Just Battle{bState = AnnounceDamage attack})} = handleBattleDamageAnnounce event world
-handleBattleInput event world@World{battle = (Just Battle{bState = DefenderVictor defender})} = handleBattleDefenderVictor event world
-handleBattleInput event world@World{battle = (Just Battle{bState = AttackerVictor attacker})} = handleBattleAttackerVictor event world
+handleBattleInput event world@World{battle = (Just Battle{bState = AnnounceDamage _})} = handleBattleDamageAnnounce event world
+handleBattleInput event world@World{battle = (Just Battle{bState = DefenderVictor _})} = handleBattleDefenderVictor event world
+handleBattleInput event world@World{battle = (Just Battle{bState = AttackerVictor _})} = handleBattleAttackerVictor event world
+handleBattleInput _ world = world
 
 handleInput :: Event -> World -> World
 handleInput event world@World{state = InField} = handleMoveInput event world
