@@ -32,9 +32,13 @@ data Assets = Assets {
     asGrass :: Picture
 }
 
+data WorldState = InField | InBattle
+
 data World = World {
+    state :: WorldState,
     grid :: Grid,
     cow :: Cow,
+    stepsSinceBattle :: Int,
     assets :: Assets
 }
 
@@ -86,6 +90,7 @@ moveCowIfNotMoving direction cow
 
 initialWorld :: World
 initialWorld = World {
+    state = InField,
     assets = (Assets {
         asCow = png "./assets/cow.png",
         asGrass = (scale 2 2 $ png "./assets/grass.png")
@@ -93,6 +98,7 @@ initialWorld = World {
     cow = (Cow {
         movement = Done (10, 10)
     }),
+    stepsSinceBattle = 0,
     grid = Grid {rows=21, columns=21, displayRatio=32}
 }
 
@@ -111,18 +117,30 @@ draw World{..} = pictures (grassBackground (asGrass assets) grid ++ [
         cowMove = movement cow
         (cowX, cowY) = getDisplayPosFromMovement grid cowMove
 
+handleMoveInput :: Event -> World -> World
+handleMoveInput (EventKey (Char 'w') GlossKey.Down _ _) world@World{cow} = world {cow = moveCowIfNotMoving Up cow}
+handleMoveInput (EventKey (Char 's') GlossKey.Down _ _) world@World{cow} = world {cow = moveCowIfNotMoving Down cow}
+handleMoveInput (EventKey (Char 'a') GlossKey.Down _ _) world@World{cow} = world {cow = moveCowIfNotMoving Left cow}
+handleMoveInput (EventKey (Char 'd') GlossKey.Down _ _) world@World{cow} = world {cow = moveCowIfNotMoving Right cow}
+handleMoveInput _ world = world
+
 handleInput :: Event -> World -> World
-handleInput (EventKey (Char 'w') GlossKey.Down _ _) world@World{cow} = world {cow = moveCowIfNotMoving Up cow}
-handleInput (EventKey (Char 's') GlossKey.Down _ _) world@World{cow} = world {cow = moveCowIfNotMoving Down cow}
-handleInput (EventKey (Char 'a') GlossKey.Down _ _) world@World{cow} = world {cow = moveCowIfNotMoving Left cow}
-handleInput (EventKey (Char 'd') GlossKey.Down _ _) world@World{cow} = world {cow = moveCowIfNotMoving Right cow}
+handleInput event world@World{state=InField} = handleMoveInput event world
 handleInput _ world = world
 
 updateCowPosition :: Float -> World -> World
-updateCowPosition _ world@World{cow} =
+updateCowPosition _ world@World{cow, stepsSinceBattle} =
     case movement cow of
         Start direction start end            -> world {cow = cow {movement = Moving direction 1 start end}}
-        Moving _ 15 _ end                    -> world {cow = cow {movement = Done end}}
+        Moving _ 15 _ end                    ->
+            let stepsSinceBattle' = stepsSinceBattle + 1
+                underAttack = stepsSinceBattle' == 3
+                state' = if underAttack then InBattle else InField
+            in world {
+                    cow = cow {movement = Done end},
+                    stepsSinceBattle = stepsSinceBattle',
+                    state = state'
+                }
         Moving direction iteration start end -> world {cow = cow {movement = Moving direction (iteration + 1) start end}}
         Done _                               -> world
 
