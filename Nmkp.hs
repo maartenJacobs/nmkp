@@ -44,7 +44,8 @@ data Assets = Assets {
     asCow :: Picture,
     asGrass :: Picture,
     asVegan :: Picture,
-    asCarnist :: Picture
+    asCarnist :: Picture,
+    asGameOver :: Picture
 }
 
 data Turn = DefenderTurn 
@@ -95,7 +96,7 @@ defaultAttacker :: Human
 defaultAttacker = mkHuman 50 [
         Attack {
             attName = "Need mah protein",
-            damage = 5
+            damage = 15
         }
     ]
 
@@ -103,11 +104,11 @@ defaultDefender :: Human
 defaultDefender = mkHuman 100 [
         Attack {
             attName = "Vegan proganda!",
-            damage = 10
+            damage = 5
         },
         Attack {
             attName = "Try Huel",
-            damage = 15
+            damage = 25
         },
         Attack {
             attName = "Carnism is not sustainable",
@@ -201,7 +202,8 @@ initialWorld = World {
         asCow = png "./assets/cow.png",
         asGrass = scale 2 2 $ png "./assets/grass.png",
         asVegan = scale 5.075 5.075 $ png "./assets/vegan.png",
-        asCarnist = scale 4.7 4.7 $ png "./assets/carnist.png"
+        asCarnist = scale 4.7 4.7 $ png "./assets/carnist.png",
+        asGameOver = png "./assets/gameover.png"
     }),
     defenders = [
         defaultDefender
@@ -257,7 +259,7 @@ drawMenuScreen :: Battle -> Picture
 drawMenuScreen battle@Battle{..} =
     let itemOffset idx = - 138 - (25 + fromIntegral idx * 48)
         selectedOffset = itemOffset selectedAttack
-        textOffsets = map itemOffset [0..3]
+        textOffsets = (map itemOffset [0..3]) :: [Float]
         attacks = getCurrentAttacks battle
         attacksAndOffsets = zip textOffsets attacks
         drawAttack (y, Attack{..}) = color black . translate (-259) y . scale 0.15 0.15 $ text attName
@@ -281,9 +283,13 @@ drawBattleState World{assets, battle = (Just battle)} =
         ]
 drawBattleState World{battle = Nothing} = undefined
 
+drawGameOver :: World -> Picture
+drawGameOver World{assets} = asGameOver assets
+
 draw :: World -> Picture
 draw world@World{state = InField} = drawFieldState world
 draw world@World{state = InBattle} = drawBattleState world
+draw world@World{state = GameOver} = drawGameOver world
 
 handleMoveInput :: Event -> World -> World
 handleMoveInput (EventKey (Char 'w') GlossKey.Down _ _) world@World{cow} = world {cow = moveCowIfNotMoving Up cow}
@@ -315,6 +321,7 @@ handleBattleInput _ world = world
 handleInput :: Event -> World -> World
 handleInput event world@World{state = InField} = handleMoveInput event world
 handleInput event world@World{state = InBattle} = handleBattleInput event world
+handleInput _ world@World{state = GameOver} = world
 
 updateMovePosition :: World -> World
 updateMovePosition world@World{cow, stepsSinceBattle, defenders} =
