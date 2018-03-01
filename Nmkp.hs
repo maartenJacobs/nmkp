@@ -266,12 +266,12 @@ drawAttackerHP = drawHP (-146, 218)
 -- size = (672, 202)
 drawMenuScreen :: Battle -> Picture
 drawMenuScreen battle@Battle{..} =
-    let itemOffset idx = - 138 - (25 + fromIntegral idx * 48)
-        selectedOffset = itemOffset selectedAttack
+    let itemOffset idx = - 170 - (25 + fromIntegral idx * 32)
+        selectedOffset = 10 + itemOffset selectedAttack
         textOffsets = map itemOffset ([0..3] :: [Int])
         attacks = getCurrentAttacks battle
         attacksAndOffsets = zip textOffsets attacks
-        drawAttack (y, Attack{..}) = color black . translate (-259) y . scale 0.15 0.15 $ text attName
+        drawAttack (y, Attack{..}) = color black . translate (-259) y . scale 0.2 0.2 $ text attName
     in pictures $
             map drawAttack attacksAndOffsets ++ [
                 -- draw border
@@ -282,7 +282,7 @@ drawMenuScreen battle@Battle{..} =
 -- origin point = (0, -235)
 -- size = (672, 202)
 drawMenuScreenWithAnnouncement :: String -> Picture
-drawMenuScreenWithAnnouncement msg = color black . translate (-259) (-160) . scale 0.15 0.15 $ text msg
+drawMenuScreenWithAnnouncement msg = color black . translate (-259) (-180) . scale 0.2 0.2 $ text msg
 
 drawFullBattleScreenWithAnnouncement :: Assets -> Battle -> String -> Picture
 drawFullBattleScreenWithAnnouncement assets battle msg =
