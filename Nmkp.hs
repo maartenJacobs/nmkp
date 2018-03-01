@@ -198,22 +198,22 @@ moveCowIfNotMoving direction cow
 initialWorld :: World
 initialWorld = World {
     state = InField,
-    assets = (Assets {
+    assets = Assets {
         asCow = png "./assets/cow.png",
         asGrass = scale 2 2 $ png "./assets/grass.png",
         asVegan = scale 5.075 5.075 $ png "./assets/vegan.png",
         asCarnist = scale 4.7 4.7 $ png "./assets/carnist.png",
         asGameOver = png "./assets/gameover.png"
-    }),
+    },
     defenders = [
         defaultDefender
     ],
     battle = Nothing,
-    cow = (Cow {
+    cow = Cow {
         movement = Done (10, 10)
-    }),
+    },
     stepsSinceBattle = 0,
-    grid = Grid {rows=21, columns=21, displayRatio=32}
+    grid = Grid {rows = 21, columns = 21, displayRatio = 32}
 }
 
 grassBackground :: Picture -> Grid -> [Picture]
@@ -248,7 +248,7 @@ drawDefenderHP :: Human -> Picture
 drawDefenderHP = drawHP (191, -34)
 
 drawAttacker :: Assets -> Human -> Picture
-drawAttacker assets Human{..} = translate (189) 210 $ asCarnist assets
+drawAttacker assets Human{..} = translate 189 210 $ asCarnist assets
 
 drawAttackerHP :: Human -> Picture
 drawAttackerHP = drawHP (-146, 218)
@@ -259,7 +259,7 @@ drawMenuScreen :: Battle -> Picture
 drawMenuScreen battle@Battle{..} =
     let itemOffset idx = - 138 - (25 + fromIntegral idx * 48)
         selectedOffset = itemOffset selectedAttack
-        textOffsets = (map itemOffset [0..3]) :: [Float]
+        textOffsets = map itemOffset ([0..3] :: [Int])
         attacks = getCurrentAttacks battle
         attacksAndOffsets = zip textOffsets attacks
         drawAttack (y, Attack{..}) = color black . translate (-259) y . scale 0.15 0.15 $ text attName
@@ -304,17 +304,20 @@ handleBattleInput (EventKey (Char 's') GlossKey.Up _ _) world@World{battle = (Ju
 handleBattleInput (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = (Just battle)} =
     let attack = getSelectedAttack battle
         battle' = applyAttackToBattle attack battle
-        won = (hitPoints $ attacker battle') == 0
+        won = hitPoints (attacker battle') == 0
     in if won
         then world {
                 battle = Nothing,
                 state = InField
             }
         else let battlePostAttacker = playAttacker battle'
-                 gameOver = (hitPoints $ defender battlePostAttacker) == 0
+                 gameOver = hitPoints (defender battlePostAttacker) == 0
              in if gameOver
-                then world {battle = Nothing, state = GameOver}
-                else world {battle = Just $ battlePostAttacker}
+                then world {
+                    battle = Nothing,
+                    state = GameOver
+                }
+                else world {battle = Just battlePostAttacker}
 handleBattleInput _ world = world
 
 
@@ -335,7 +338,7 @@ updateMovePosition world@World{cow, stepsSinceBattle, defenders} =
                 then worldWithUpdatedCow {
                         stepsSinceBattle = 0,
                         state = InBattle,
-                        battle = Just $ mkBattle (defenders !! 0)
+                        battle = Just . mkBattle $ head defenders
                     }
                 else worldWithUpdatedCow {
                         stepsSinceBattle = stepsSinceBattle'
