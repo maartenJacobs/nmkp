@@ -35,6 +35,7 @@ data Attack = Attack {
 } deriving (Show)
 
 data Human = Human {
+    hName :: String,
     maxHitPoints :: Int,
     hitPoints :: Int,
     attacks :: [Attack]
@@ -48,15 +49,24 @@ data Assets = Assets {
     asGameOver :: Picture
 }
 
-data Turn = DefenderTurn 
+data Turn = DefenderTurn
           | AttackerTurn
           deriving (Show)
+
+data BattleState = Challenge Human -- "Attacker name" wants to eat you
+                 | DefenderAttackChoose
+                 | AnnounceAttack Human Attack -- "Human name" uses "attack name"
+                 | AnnounceDamage Attack -- "attack name" inflicted "x" damage
+                 | DefenderVictor Human -- "Attacker name" has been defeated
+                 | AttackerVictor Human -- You have been defeated by "attacker name"!
+                 deriving (Show)
 
 data Battle = Battle {
     turn :: Turn,
     defender :: Human,
     attacker :: Human,
-    selectedAttack :: Int
+    selectedAttack :: Int,
+    bState :: BattleState
 } deriving (Show)
 
 data WorldState = InField
@@ -77,8 +87,9 @@ data World = World {
 stepsUntilBattle :: Int
 stepsUntilBattle = 2
 
-mkHuman :: Int -> [Attack] -> Human
-mkHuman hitPoints attacks = Human {
+mkHuman :: String -> Int -> [Attack] -> Human
+mkHuman name hitPoints attacks = Human {
+    hName = name,
     maxHitPoints = hitPoints,
     hitPoints = hitPoints,
     attacks = attacks
@@ -89,25 +100,26 @@ mkBattle defender = Battle {
     turn = DefenderTurn,
     defender = defender,
     attacker = defaultAttacker,
-    selectedAttack = 0
+    selectedAttack = 0,
+    bState = Challenge defaultAttacker
 }
 
 defaultAttacker :: Human
-defaultAttacker = mkHuman 50 [
+defaultAttacker = mkHuman "Butcher" 50 [
         Attack {
-            attName = "Need mah protein",
+            attName = "Need my protein",
             damage = 15
         }
     ]
 
 defaultDefender :: Human
-defaultDefender = mkHuman 100 [
+defaultDefender = mkHuman "Animal rights activist" 100 [
         Attack {
-            attName = "Vegan proganda!",
+            attName = "Vegan pizza",
             damage = 5
         },
         Attack {
-            attName = "Try Huel",
+            attName = "Try Huel", -- required product placement
             damage = 25
         },
         Attack {
@@ -270,8 +282,31 @@ drawMenuScreen battle@Battle{..} =
                 color black . translate (-307) selectedOffset $ thickCircle 0 20
             ]
 
-drawBattleState :: World -> Picture
-drawBattleState World{assets, battle = (Just battle)} =
+-- origin point = (0, -235)
+-- size = (672, 202)
+drawMenuScreenWithAnnouncement :: String -> Picture
+drawMenuScreenWithAnnouncement msg = color black . translate (-259) (-160) . scale 0.15 0.15 $ text msg
+
+drawFullBattleScreenWithAnnouncement :: Assets -> Battle -> String -> Picture
+drawFullBattleScreenWithAnnouncement assets battle msg =
+    let defending = defender battle
+        attacking = attacker battle
+    in pictures [
+            drawMenuScreenWithAnnouncement msg,
+            drawDefender assets defending,
+            drawDefenderHP defending,
+            drawAttacker assets attacking,
+            drawAttackerHP attacking
+        ]
+
+drawBattleChallenge :: Assets -> Human -> Picture
+drawBattleChallenge assets attacker = pictures [
+        drawMenuScreenWithAnnouncement (hName attacker ++ " wants to eat you"),
+        drawAttacker assets attacker
+    ]
+
+drawBattleAttackChoose :: Assets -> Battle -> Picture
+drawBattleAttackChoose assets battle =
     let defending = defender battle
         attacking = attacker battle
     in pictures [
@@ -281,6 +316,40 @@ drawBattleState World{assets, battle = (Just battle)} =
             drawAttacker assets attacking,
             drawAttackerHP attacking
         ]
+
+drawBattleAttackAnnounce :: Assets -> Battle -> Human -> Attack -> Picture
+drawBattleAttackAnnounce assets battle Human{hName} Attack{attName} = drawFullBattleScreenWithAnnouncement assets battle (hName ++ " uses " ++ attName)
+
+drawBattleDamageAnnounce :: Assets -> Battle -> Attack -> Picture
+drawBattleDamageAnnounce assets battle Attack{attName, damage} = drawFullBattleScreenWithAnnouncement assets battle (attName ++ " inflicted " ++ show damage)
+
+drawBattleDefenderVictor :: Assets -> Battle -> Human -> Picture
+drawBattleDefenderVictor assets battle Human{hName} =
+    let defending = defender battle
+        attacking = attacker battle
+    in pictures [
+            drawMenuScreenWithAnnouncement (hName ++ " has been defeated"),
+            drawDefender assets defending,
+            drawAttacker assets attacking
+        ]
+
+drawBattleAttackerVictor :: Assets -> Battle -> Human -> Picture
+drawBattleAttackerVictor assets battle Human{hName} =
+    let defending = defender battle
+        attacking = attacker battle
+    in pictures [
+            drawMenuScreenWithAnnouncement ("You have been defeated by " ++ hName ++ "!"),
+            drawDefender assets defending,
+            drawAttacker assets attacking
+        ]
+
+drawBattleState :: World -> Picture
+drawBattleState World{assets, battle = (Just Battle{bState = Challenge attacker})} = drawBattleChallenge assets attacker
+drawBattleState World{assets, battle = (Just battle@Battle{bState = DefenderAttackChoose})} = drawBattleAttackChoose assets battle
+drawBattleState World{assets, battle = (Just battle@Battle{bState = AnnounceAttack human attack})} = drawBattleAttackAnnounce assets battle human attack
+drawBattleState World{assets, battle = (Just battle@Battle{bState = AnnounceDamage attack})} = drawBattleDamageAnnounce assets battle attack
+drawBattleState World{assets, battle = (Just battle@Battle{bState = DefenderVictor attacker})} = drawBattleDefenderVictor assets battle attacker
+drawBattleState World{assets, battle = (Just battle@Battle{bState = AttackerVictor attacker})} = drawBattleAttackerVictor assets battle attacker
 drawBattleState World{battle = Nothing} = undefined
 
 drawGameOver :: World -> Picture
@@ -298,28 +367,55 @@ handleMoveInput (EventKey (Char 'a') GlossKey.Down _ _) world@World{cow} = world
 handleMoveInput (EventKey (Char 'd') GlossKey.Down _ _) world@World{cow} = world {cow = moveCowIfNotMoving Right cow}
 handleMoveInput _ world = world
 
-handleBattleInput :: Event -> World -> World
-handleBattleInput (EventKey (Char 'w') GlossKey.Up _ _) world@World{battle = (Just battle)} = world {battle = Just $ battle {selectedAttack = selectedAttack battle - 1}}
-handleBattleInput (EventKey (Char 's') GlossKey.Up _ _) world@World{battle = (Just battle)} = world {battle = Just $ battle {selectedAttack = selectedAttack battle + 1}}
-handleBattleInput (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = (Just battle)} =
-    let attack = getSelectedAttack battle
-        battle' = applyAttackToBattle attack battle
-        won = hitPoints (attacker battle') == 0
-    in if won
-        then world {
-                battle = Nothing,
-                state = InField
-            }
-        else let battlePostAttacker = playAttacker battle'
-                 gameOver = hitPoints (defender battlePostAttacker) == 0
-             in if gameOver
-                then world {
-                    battle = Nothing,
-                    state = GameOver
-                }
-                else world {battle = Just battlePostAttacker}
-handleBattleInput _ world = world
+handleBattleChallengeInput :: Event -> World -> World
+handleBattleChallengeInput (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = Just battle} = world {battle = Just $ battle {bState = DefenderAttackChoose}}
+handleBattleChallengeInput _ world = world
 
+handleBattleSelectionInput :: Event -> World -> World
+handleBattleSelectionInput (EventKey (Char 'w') GlossKey.Up _ _) world@World{battle = (Just battle)} = world {battle = Just $ battle {selectedAttack = selectedAttack battle - 1}}
+handleBattleSelectionInput (EventKey (Char 's') GlossKey.Up _ _) world@World{battle = (Just battle)} = world {battle = Just $ battle {selectedAttack = selectedAttack battle + 1}}
+handleBattleSelectionInput (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = (Just battle)} =
+    world {battle = Just $ battle {bState = AnnounceAttack (defender battle) (getSelectedAttack battle)}}
+handleBattleSelectionInput _ world = world
+
+handleBattleAttackAnnounce :: Event -> World -> World
+handleBattleAttackAnnounce (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = Just battle@Battle{bState = AnnounceAttack _ attack}} =
+    world {battle = Just $ battle {bState = AnnounceDamage attack}}
+handleBattleAttackAnnounce _ world = world
+
+handleBattleDamageAnnounce :: Event -> World -> World
+handleBattleDamageAnnounce (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = Just battle@Battle{bState = AnnounceDamage attack, turn = DefenderTurn}} =
+    let battle' = applyAttackToBattle attack battle
+        attacker' = attacker battle'
+        won = hitPoints attacker' == 0
+    in if won
+        then world {battle = Just $ battle' {bState = DefenderVictor (defender battle')}}
+        else world {battle = Just . swapTurn $ battle' {bState = AnnounceAttack attacker' (head $ attacks attacker')}}
+handleBattleDamageAnnounce (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = Just battle@Battle{bState = AnnounceDamage attack, turn = AttackerTurn}} =
+    let battle' = applyAttackToBattle attack battle
+        won = hitPoints (defender battle') == 0
+    in if won
+        then world {battle = Just $ battle' {bState = AttackerVictor (attacker battle')}}
+        else world {battle = Just . swapTurn $ battle' {bState = DefenderAttackChoose}}
+handleBattleDamageAnnounce _ world = world
+
+handleBattleDefenderVictor :: Event -> World -> World
+handleBattleDefenderVictor (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world =
+    world {state = InField, battle = Nothing}
+handleBattleDefenderVictor _ world = world
+
+handleBattleAttackerVictor :: Event -> World -> World
+handleBattleAttackerVictor (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world =
+    world {state = GameOver, battle = Nothing}
+handleBattleAttackerVictor _ world = world
+
+handleBattleInput :: Event -> World -> World
+handleBattleInput event world@World{battle = (Just Battle{bState = Challenge _})} = handleBattleChallengeInput event world
+handleBattleInput event world@World{battle = (Just Battle{bState = DefenderAttackChoose})} = handleBattleSelectionInput event world
+handleBattleInput event world@World{battle = (Just Battle{bState = AnnounceAttack _ _})} = handleBattleAttackAnnounce event world
+handleBattleInput event world@World{battle = (Just Battle{bState = AnnounceDamage attack})} = handleBattleDamageAnnounce event world
+handleBattleInput event world@World{battle = (Just Battle{bState = DefenderVictor defender})} = handleBattleDefenderVictor event world
+handleBattleInput event world@World{battle = (Just Battle{bState = AttackerVictor attacker})} = handleBattleAttackerVictor event world
 
 handleInput :: Event -> World -> World
 handleInput event world@World{state = InField} = handleMoveInput event world
