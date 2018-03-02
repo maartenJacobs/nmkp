@@ -87,6 +87,7 @@ data BattleState = Challenge Human -- "Attacker name" wants to eat you
                  | AnnounceAttack Human Attack -- "Human name" uses "attack name"
                  | AnnounceDamage Attack -- "attack name" inflicted "x" damage
                  | DefenderVictor Human -- "Attacker name" has been defeated
+                 | AnnounceDefenderDefeated Human -- "Defender name" has been defeated. Bringing in the next defender.
                  | AttackerVictor Human -- You have been defeated by "attacker name"!
                  | BattleMenuOpen [BattleMenuOption] Int
                  | Convert ConvertState
@@ -596,6 +597,18 @@ drawChooseDefenderMenu World{battle = Just battle, assets} options selectedIdx =
             drawAttackerHP attacking
         ]
 
+drawDefenderDefeated :: World -> Human -> Picture
+drawDefenderDefeated World{battle = Just battle, assets} defender =
+    let defending = getSelectedDefender battle
+        attacking = attacker battle
+    in pictures [
+            drawMenuScreenWithAnnouncement [hName defender ++ " has been defeated.", "  Bringing in the next defender."],
+            drawDefender assets defending,
+            drawDefenderHP defending,
+            drawAttacker assets attacking,
+            drawAttackerHP attacking
+        ]
+
 drawBattleState :: World -> Picture
 drawBattleState world@World{assets, battle = Just battle}
     | Challenge attacker <- bState battle = drawBattleChallenge assets attacker
@@ -607,6 +620,7 @@ drawBattleState world@World{assets, battle = Just battle}
     | BattleMenuOpen options selectedIdx <- bState battle = drawBattleMenu assets battle options selectedIdx
     | Convert convertState <- bState battle = drawBattleConvertState world battle convertState
     | ChooseDefenderMenuOpen options selectedIdx <- bState battle = drawChooseDefenderMenu world options selectedIdx
+    | AnnounceDefenderDefeated defender <- bState battle = drawDefenderDefeated world defender
 drawBattleState World{battle = Nothing} = undefined
 
 drawGameOver :: World -> Picture
@@ -677,10 +691,11 @@ handleBattleDamageAnnounce (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) worl
                 }
 handleBattleDamageAnnounce (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = Just battle@Battle{bState = AnnounceDamage attack, turn = AttackerTurn}} =
     let battle' = applyAttackToBattle attack battle
+        currentDefender = getSelectedDefender battle'
         won = hitPoints (getSelectedDefender battle') == 0
         remainingDefenders = removeSelectedDefender battle'
     in if | won && null remainingDefenders  -> world {battle = Just $ battle' {bState = AttackerVictor (attacker battle')}}
-          | won                             -> world {battle = Just . swapTurn $ battle' {bState = DefenderAttackChoose, bSelectedDefender = 0, bDefenders = remainingDefenders}}
+          | won                             -> world {battle = Just . swapTurn $ battle' {bState = AnnounceDefenderDefeated currentDefender, bSelectedDefender = 0, bDefenders = remainingDefenders}}
           | otherwise                       -> world {battle = Just . swapTurn $ battle' {bState = DefenderAttackChoose}}
 handleBattleDamageAnnounce _ world = world
 
@@ -753,6 +768,10 @@ handleDefenderMenuInput event world@World{gen, battle = Just battle@Battle{attac
       selectedIdx < (length options - 1) = world {battle = Just battle {bState = ChooseDefenderMenuOpen options (selectedIdx + 1)}}
     | otherwise = world
 
+handleBattleDefenderDefeatedInput :: Event -> World -> World
+handleBattleDefenderDefeatedInput (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = Just battle} = world {battle = Just battle{bState = DefenderAttackChoose}}
+handleBattleDefenderDefeatedInput _ world = world
+
 handleBattleInput :: Event -> World -> World
 handleBattleInput event world@World{battle = Just battle}
     | Challenge _ <- bState battle = handleBattleChallengeInput event world
@@ -764,6 +783,7 @@ handleBattleInput event world@World{battle = Just battle}
     | BattleMenuOpen _ _ <- bState battle = handleBattleMenuOpen event world
     | Convert convertState <- bState battle = handleBattleConvertStateInput convertState event world
     | ChooseDefenderMenuOpen options selectedIdx <- bState battle = handleDefenderMenuInput event world options selectedIdx
+    | AnnounceDefenderDefeated _ <- bState battle = handleBattleDefenderDefeatedInput event world
 handleBattleInput _ world = world
 
 handleInput :: Event -> World -> World
