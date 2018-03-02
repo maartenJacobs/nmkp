@@ -399,7 +399,7 @@ genesis gen = World {
         asFatVegan = scale 4.7 4.7 $ png "./assets/fat-vegan.png",
         asNutMilker = scale 4.7 4.7 $ png "./assets/nut-milker.png"
     },
-    defenders = [defaultDefender, fatVegan],
+    defenders = [defaultDefender],
     battle = Nothing,
     cow = Cow {
         movement = Done (10, 10),
@@ -411,8 +411,8 @@ genesis gen = World {
     grid = Grid {rows = 21, columns = 21, displayRatio = 32}
 }
 
-backToField :: World -> World
-backToField world = world {state = InField, battle = Nothing}
+backToField :: Battle -> World -> World
+backToField Battle{bDefenders} world = world {defenders = bDefenders, state = InField, battle = Nothing}
 
 addDefender :: Human -> World -> World
 addDefender defender world@World{defenders} = world {defenders = defenders ++ [defender]}
@@ -665,7 +665,7 @@ handleBattleDamageAnnounce (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) worl
 handleBattleDamageAnnounce _ world = world
 
 handleBattleDefenderVictor :: Event -> World -> World
-handleBattleDefenderVictor (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world = backToField world
+handleBattleDefenderVictor (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = Just battle} = backToField battle world
 handleBattleDefenderVictor _ world = world
 
 handleBattleAttackerVictor :: Event -> World -> World
@@ -699,8 +699,8 @@ handleBattleConvertStateInput ConvertAnnouncePokeball event world@World{gen, bat
             then worldWithUpdatedGen {battle = Just battle {bState = Convert (ConvertAnnounceSuccess newDefender)}}
             else worldWithUpdatedGen {battle = Just battle {bState = Convert ConvertAnnounceFailure}}
     | otherwise = world
-handleBattleConvertStateInput (ConvertAnnounceSuccess newDefender) event world
-    | EventKey (SpecialKey KeyEnter) GlossKey.Up _ _ <- event = addDefender newDefender $ backToField world
+handleBattleConvertStateInput (ConvertAnnounceSuccess newDefender) event world@World{battle = Just battle}
+    | EventKey (SpecialKey KeyEnter) GlossKey.Up _ _ <- event = addDefender newDefender $ backToField battle world
     | otherwise = world
 handleBattleConvertStateInput ConvertAnnounceFailure event world@World{gen, battle = Just battle@Battle{attacker}}
     | EventKey (SpecialKey KeyEnter) GlossKey.Up _ _ <- event =
