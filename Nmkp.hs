@@ -4,6 +4,7 @@
 import Graphics.Gloss.Game hiding (Up, Down)
 import qualified Graphics.Gloss.Game as GlossKey
 import Prelude hiding (Left, Right)
+import System.Random
 
 data Grid = Grid {
     rows :: Int,
@@ -75,6 +76,7 @@ data WorldState = InField
 
 data World = World {
     state :: WorldState,
+    gen :: StdGen,
     grid :: Grid,
     cow :: Cow,
     defenders :: [Human],
@@ -82,9 +84,6 @@ data World = World {
     stepsSinceBattle :: Int,
     assets :: Assets
 }
-
-stepsUntilBattle :: Int
-stepsUntilBattle = 2
 
 mkHuman :: String -> Int -> [Attack] -> Human
 mkHuman name hitPoints attacks = Human {
@@ -104,10 +103,18 @@ mkBattle defender = Battle {
 }
 
 defaultAttacker :: Human
-defaultAttacker = mkHuman "Butcher" 50 [
+defaultAttacker = mkHuman "Hungry carnist" 50 [
         Attack {
-            attName = "Need my protein",
+            attName = "Plants have feelings",
             damage = 15
+        },
+        Attack {
+            attName = "Facon isn't bacon",
+            damage = 5
+        },
+        Attack {
+            attName = "How can I get my protein?",
+            damage = 10
         }
     ]
 
@@ -204,9 +211,34 @@ moveCowIfNotMoving grid direction cow
     where
         cowMove = movement cow
 
-initialWorld :: World
-initialWorld = World {
+chanceOfAttack :: Int -> Int
+chanceOfAttack 1 = 12
+chanceOfAttack 2 = 15
+chanceOfAttack 3 = 20
+chanceOfAttack 4 = 30
+chanceOfAttack 5 = 45
+chanceOfAttack 6 = 60
+chanceOfAttack 7 = 75
+chanceOfAttack 8 = 90
+chanceOfAttack 9 = 95
+chanceOfAttack _ = 100
+
+isUnderAttack :: StdGen -> Int -> (Bool, StdGen)
+isUnderAttack gen stepsSinceBattle =
+    let chance = chanceOfAttack stepsSinceBattle
+        (luck, gen') = randomR (0, 100) gen
+        underAttack = luck <= chance
+    in (underAttack, gen')
+
+getRandomAttack :: StdGen -> Human -> (Attack, StdGen)
+getRandomAttack gen Human{attacks} =
+    let (attackIndex, gen') = randomR (0, length attacks - 1) gen
+    in (attacks !! attackIndex, gen')
+
+genesis :: StdGen -> World
+genesis gen = World {
     state = InField,
+    gen = gen,
     assets = Assets {
         asCow = png "./assets/cow.png",
         asGrass = scale 2 2 $ png "./assets/grass.png",
@@ -275,8 +307,6 @@ drawMenuScreen battle@Battle{..} =
     in pictures $
             map drawAttack attacksAndOffsets ++ [
                 color black $ line [(-336, -134), (336, -134)],
-                -- draw border
-                -- draw selection arrow
                 color black . translate (-307) selectedOffset $ thickCircle 0 20
             ]
 
@@ -389,13 +419,18 @@ handleBattleAttackAnnounce (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) worl
 handleBattleAttackAnnounce _ world = world
 
 handleBattleDamageAnnounce :: Event -> World -> World
-handleBattleDamageAnnounce (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = Just battle@Battle{bState = AnnounceDamage attack, turn = DefenderTurn}} =
+handleBattleDamageAnnounce (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{gen, battle = Just battle@Battle{bState = AnnounceDamage attack, turn = DefenderTurn}} =
     let battle' = applyAttackToBattle attack battle
         attacker' = attacker battle'
         won = hitPoints attacker' == 0
     in if won
         then world {battle = Just $ battle' {bState = DefenderVictor (defender battle')}}
-        else world {battle = Just . swapTurn $ battle' {bState = AnnounceAttack attacker' (head $ attacks attacker')}}
+        else
+            let (attackerAttack, gen') = getRandomAttack gen attacker'
+            in world {
+                    gen = gen',
+                    battle = Just . swapTurn $ battle' {bState = AnnounceAttack attacker' attackerAttack}
+                }
 handleBattleDamageAnnounce (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = Just battle@Battle{bState = AnnounceDamage attack, turn = AttackerTurn}} =
     let battle' = applyAttackToBattle attack battle
         won = hitPoints (defender battle') == 0
@@ -429,20 +464,20 @@ handleInput event world@World{state = InBattle} = handleBattleInput event world
 handleInput _ world@World{state = GameOver} = world
 
 updateMovePosition :: World -> World
-updateMovePosition world@World{cow, stepsSinceBattle, defenders} =
+updateMovePosition world@World{gen, cow, stepsSinceBattle, defenders} =
     case movement cow of
         Start direction start end            -> world {cow = cow {movement = Moving direction 1 start end}}
         Moving _ 15 _ end                    ->
             let stepsSinceBattle' = stepsSinceBattle + 1
-                underAttack = stepsSinceBattle' == stepsUntilBattle
-                worldWithUpdatedCow = world {cow = cow {movement = Done end}}
+                (underAttack, gen') = isUnderAttack gen stepsSinceBattle'
+                worldWithUpdatedCowAndGen = world {cow = cow {movement = Done end}, gen = gen'}
             in if underAttack
-                then worldWithUpdatedCow {
+                then worldWithUpdatedCowAndGen {
                         stepsSinceBattle = 0,
                         state = InBattle,
                         battle = Just . mkBattle $ head defenders
                     }
-                else worldWithUpdatedCow {
+                else worldWithUpdatedCowAndGen {
                         stepsSinceBattle = stepsSinceBattle'
                     }
         Moving direction iteration start end -> world {cow = cow {movement = Moving direction (iteration + 1) start end}}
@@ -460,11 +495,12 @@ windowWidth Grid{..} = columns * displayRatio
 
 main :: IO ()
 main = do
-    let World{grid} = initialWorld
+    gen <- getStdGen
+    let world@World{grid} = genesis gen
     play (InWindow "Nmkp" (windowWidth grid, windowHeight grid) (0, 0))
          white
          30
-         initialWorld
+         world
          draw
          handleInput
          [updateFieldPosition]
