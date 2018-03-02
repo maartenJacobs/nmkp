@@ -527,8 +527,8 @@ drawBattleMenu assets battle options selectedIdx =
             drawAttackerHP attacking
         ]
 
-drawBattleConvertState :: World -> ConvertState -> Picture
-drawBattleConvertState World{assets, battle = Just battle} state
+drawBattleConvertState :: World -> Battle -> ConvertState -> Picture
+drawBattleConvertState World{assets} battle state
     | ConvertAnnounceAttempt <- state = drawFullBattleScreenWithAnnouncement assets battle ["You try to convert " ++ (hName $ attacker battle)]
     | ConvertAnnouncePokeball <- state = drawFullBattleScreenWithAnnouncement assets battle ["You throw vegan propaganda at " ++ (hName $ attacker battle)]
     | ConvertAnnounceSuccess newDefender <- state = drawFullBattleScreenWithAnnouncement assets battle [
@@ -546,7 +546,7 @@ drawBattleState world@World{assets, battle = Just battle}
     | DefenderVictor attacker <- bState battle = drawBattleDefenderVictor assets battle attacker
     | AttackerVictor attacker <- bState battle = drawBattleAttackerVictor assets battle attacker
     | BattleMenuOpen options selectedIdx <- bState battle = drawBattleMenu assets battle options selectedIdx
-    | Convert convertState <- bState battle = drawBattleConvertState world convertState
+    | Convert convertState <- bState battle = drawBattleConvertState world battle convertState
 drawBattleState World{battle = Nothing} = undefined
 
 drawGameOver :: World -> Picture
@@ -642,7 +642,7 @@ handleBattleConvertStateInput ConvertAnnouncePokeball event world@World{gen, bat
             then worldWithUpdatedGen {battle = Just battle {bState = Convert (ConvertAnnounceSuccess newDefender)}}
             else worldWithUpdatedGen {battle = Just battle {bState = Convert ConvertAnnounceFailure}}
     | otherwise = world
-handleBattleConvertStateInput (ConvertAnnounceSuccess newDefender) event world@World{battle = Just battle}
+handleBattleConvertStateInput (ConvertAnnounceSuccess newDefender) event world
     | EventKey (SpecialKey KeyEnter) GlossKey.Up _ _ <- event = addDefender newDefender $ backToField world
     | otherwise = world
 handleBattleConvertStateInput ConvertAnnounceFailure event world@World{gen, battle = Just battle@Battle{attacker}}
