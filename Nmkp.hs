@@ -497,7 +497,7 @@ main :: IO ()
 main = do
     gen <- getStdGen
     let world@World{grid} = genesis gen
-    play (InWindow "Nmkp" (windowWidth grid, windowHeight grid) (0, 0))
+    play (InWindow "Nmkp / Graze Fighter / Plants vs Carnists" (windowWidth grid, windowHeight grid) (0, 0))
          white
          30
          world
