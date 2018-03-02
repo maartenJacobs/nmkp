@@ -614,9 +614,13 @@ draw world@World{state = GameOver} = drawGameOver world
 handleMoveInput :: Event -> World -> World
 handleMoveInput (EventKey key GlossKey.Down _ _) world@World{cow, grid}
     | Char 'w' <- key = moveCow Up
+    | SpecialKey KeyUp <- key = moveCow Up
     | Char 's' <- key = moveCow Down
+    | SpecialKey KeyDown <- key = moveCow Down
     | Char 'a' <- key = moveCow Left
+    | SpecialKey KeyLeft <- key = moveCow Left
     | Char 'd' <- key = moveCow Right
+    | SpecialKey KeyRight <- key = moveCow Right
     where moveCow direction = world {cow = moveCowIfNotMoving grid cow direction}
 handleMoveInput _ world = world
 
@@ -624,12 +628,21 @@ handleBattleChallengeInput :: Event -> World -> World
 handleBattleChallengeInput (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = Just battle} = world {battle = Just $ battle {bState = DefenderAttackChoose}}
 handleBattleChallengeInput _ world = world
 
+moveSelectedAttack :: Int -> World -> World
+moveSelectedAttack offset world@World{battle = Just battle} = world {battle = Just $ battle {selectedAttack = selectedAttack battle + offset}}
+
 handleBattleSelectionInput :: Event -> World -> World
 handleBattleSelectionInput (EventKey (Char 'w') GlossKey.Up _ _) world@World{battle = (Just battle)}
-    | selectedAttack battle > 0 = world {battle = Just $ battle {selectedAttack = selectedAttack battle - 1}}
+    | selectedAttack battle > 0 = moveSelectedAttack (-1) world
+    | otherwise = world
+handleBattleSelectionInput (EventKey (SpecialKey KeyUp) GlossKey.Up _ _) world@World{battle = (Just battle)}
+    | selectedAttack battle > 0 = moveSelectedAttack (-1) world
     | otherwise = world
 handleBattleSelectionInput (EventKey (Char 's') GlossKey.Up _ _) world@World{battle = (Just battle)}
-    | selectedAttack battle < (length . attacks $ getSelectedDefender battle) - 1 = world {battle = Just $ battle {selectedAttack = selectedAttack battle + 1}}
+    | selectedAttack battle < (length . attacks $ getSelectedDefender battle) - 1 = moveSelectedAttack 1 world
+    | otherwise = world
+handleBattleSelectionInput (EventKey (SpecialKey KeyDown) GlossKey.Up _ _) world@World{battle = (Just battle)}
+    | selectedAttack battle < (length . attacks $ getSelectedDefender battle) - 1 = moveSelectedAttack 1 world
     | otherwise = world
 handleBattleSelectionInput (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = (Just battle)} =
     world {battle = Just $ battle {bState = AnnounceAttack (getSelectedDefender battle) (getSelectedAttack battle)}}
@@ -682,7 +695,11 @@ handleBattleMenuOpen event world@World{defenders, battle = Just battle@Battle{bS
             ChooseDefender -> world {battle = Just battle {bState = ChooseDefenderMenuOpen defenders 0}}
     | EventKey (Char 'w') GlossKey.Up _ _ <- event,
       selectedIdx > 0 = world {battle = Just battle {bState = BattleMenuOpen options (selectedIdx - 1)}}
+    | EventKey (SpecialKey KeyUp) GlossKey.Up _ _ <- event,
+      selectedIdx > 0 = world {battle = Just battle {bState = BattleMenuOpen options (selectedIdx - 1)}}
     | EventKey (Char 's') GlossKey.Up _ _ <- event,
+      selectedIdx < (length options - 1) = world {battle = Just battle {bState = BattleMenuOpen options (selectedIdx + 1)}}
+    | EventKey (SpecialKey KeyDown) GlossKey.Up _ _ <- event,
       selectedIdx < (length options - 1) = world {battle = Just battle {bState = BattleMenuOpen options (selectedIdx + 1)}}
 handleBattleMenuOpen _ world = world
 
@@ -721,7 +738,11 @@ handleDefenderMenuInput event world@World{gen, battle = Just battle@Battle{attac
             }
     | EventKey (Char 'w') GlossKey.Up _ _ <- event,
       selectedIdx > 0 = world {battle = Just battle {bState = ChooseDefenderMenuOpen options (selectedIdx - 1)}}
+    | EventKey (SpecialKey KeyUp) GlossKey.Up _ _ <- event,
+      selectedIdx > 0 = world {battle = Just battle {bState = ChooseDefenderMenuOpen options (selectedIdx - 1)}}
     | EventKey (Char 's') GlossKey.Up _ _ <- event,
+      selectedIdx < (length options - 1) = world {battle = Just battle {bState = ChooseDefenderMenuOpen options (selectedIdx + 1)}}
+    | EventKey (SpecialKey KeyDown) GlossKey.Up _ _ <- event,
       selectedIdx < (length options - 1) = world {battle = Just battle {bState = ChooseDefenderMenuOpen options (selectedIdx + 1)}}
     | otherwise = world
 
