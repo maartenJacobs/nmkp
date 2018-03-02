@@ -301,8 +301,8 @@ gridToDisplayPos Grid{..} (x, y) = (fromIntegral x', fromIntegral y')
         x' = (-displayRatio * columns `div` 2) + x * displayRatio + displayRatio `div` 2
         y' = (displayRatio * rows `div` 2) - y * displayRatio - displayRatio `div` 2
 
-moveCowIfNotMoving :: Grid -> Direction -> Cow -> Cow
-moveCowIfNotMoving grid direction cow
+moveCowIfNotMoving :: Grid -> Cow -> Direction -> Cow
+moveCowIfNotMoving grid cow direction
     | isMovementDone cowMove && not (atEdgeOfGrid grid cowMove) = cow {
             movement = Start direction (getGridPosFromMove cowMove) (getNextGridPos cowMove direction)
         }
@@ -569,10 +569,12 @@ draw world@World{state = InBattle} = drawBattleState world
 draw world@World{state = GameOver} = drawGameOver world
 
 handleMoveInput :: Event -> World -> World
-handleMoveInput (EventKey (Char 'w') GlossKey.Down _ _) world@World{cow, grid} = world {cow = moveCowIfNotMoving grid Up cow}
-handleMoveInput (EventKey (Char 's') GlossKey.Down _ _) world@World{cow, grid} = world {cow = moveCowIfNotMoving grid Down cow}
-handleMoveInput (EventKey (Char 'a') GlossKey.Down _ _) world@World{cow, grid} = world {cow = moveCowIfNotMoving grid Left cow}
-handleMoveInput (EventKey (Char 'd') GlossKey.Down _ _) world@World{cow, grid} = world {cow = moveCowIfNotMoving grid Right cow}
+handleMoveInput (EventKey key GlossKey.Down _ _) world@World{cow, grid}
+    | Char 'w' <- key = moveCow Up
+    | Char 's' <- key = moveCow Down
+    | Char 'a' <- key = moveCow Left
+    | Char 'd' <- key = moveCow Right
+    where moveCow direction = world {cow = moveCowIfNotMoving grid cow direction}
 handleMoveInput _ world = world
 
 handleBattleChallengeInput :: Event -> World -> World
