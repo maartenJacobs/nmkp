@@ -93,7 +93,8 @@ data BattleState = Challenge Human -- "Attacker name" wants to eat you
 
 data Battle = Battle {
     turn :: Turn,
-    defender :: Human,
+    bDefenders :: [Human],
+    bSelectedDefender :: Int,
     attacker :: Human,
     selectedAttack :: Int,
     bState :: BattleState
@@ -131,10 +132,11 @@ mkDefender name hitPoints getAsset = mkHuman name hitPoints getAsset Nothing
 mkAttacker :: String -> Int -> (Assets -> Picture) -> Human -> [Attack] -> Human
 mkAttacker name hitPoints getAsset convertsTo = mkHuman name hitPoints getAsset (Just convertsTo)
 
-mkBattle :: Human -> Human -> Battle
-mkBattle defender attacker = Battle {
+mkBattle :: [Human] -> Human -> Battle
+mkBattle defenders attacker = Battle {
     turn = DefenderTurn,
-    defender = defender,
+    bDefenders = defenders,
+    bSelectedDefender = 0,
     attacker = attacker,
     selectedAttack = 0,
     bState = Challenge attacker
@@ -242,12 +244,29 @@ defaultDefender = mkDefender "Animal rights activist" 100 asVegan [
         }
     ]
 
+replaceAt :: [a] -> Int -> a -> [a]
+replaceAt as idx a =
+    case splitAt idx as of
+        (pre, _ : post) -> pre ++ (a : post)
+        (_, []) -> undefined -- Should not be possible?
+
+getSelectedDefender :: Battle -> Human
+getSelectedDefender Battle{bDefenders, bSelectedDefender} = bDefenders !! bSelectedDefender
+
+getSelectedDefenderAttacks :: Battle -> [Attack]
+getSelectedDefenderAttacks Battle{bDefenders, bSelectedDefender} = attacks (bDefenders !! bSelectedDefender)
+
+updateSelectedDefender :: Battle -> (Human -> Human) -> Battle
+updateSelectedDefender battle@Battle{bDefenders, bSelectedDefender} update =
+    let selectedDefender' = update (bDefenders !! bSelectedDefender)
+    in battle{bDefenders = replaceAt bDefenders bSelectedDefender selectedDefender'}
+
 getCurrentAttacks :: Battle -> [Attack]
-getCurrentAttacks Battle{turn = DefenderTurn, defender} = attacks defender
+getCurrentAttacks battle@Battle{turn = DefenderTurn} = attacks (getSelectedDefender battle)
 getCurrentAttacks Battle{turn = AttackerTurn, attacker} = attacks attacker
 
 getSelectedAttack :: Battle -> Attack
-getSelectedAttack Battle{turn = DefenderTurn, defender = Human{attacks}, selectedAttack} = attacks !! selectedAttack
+getSelectedAttack battle@Battle{turn = DefenderTurn, selectedAttack} = getSelectedDefenderAttacks battle !! selectedAttack
 getSelectedAttack Battle{turn = AttackerTurn, attacker = Human{attacks}, selectedAttack} = attacks !! selectedAttack
 
 applyAttack :: Attack -> Human -> Human
@@ -258,14 +277,14 @@ applyAttack Attack{damage} human@Human{hitPoints} =
 
 applyAttackToBattle :: Attack -> Battle -> Battle
 applyAttackToBattle attack battle@Battle{turn = DefenderTurn, attacker} = battle{attacker = applyAttack attack attacker}
-applyAttackToBattle attack battle@Battle{turn = AttackerTurn, defender} = battle{defender = applyAttack attack defender}
+applyAttackToBattle attack battle@Battle{turn = AttackerTurn} = updateSelectedDefender battle (applyAttack attack)
 
 swapTurn :: Battle -> Battle
 swapTurn battle@Battle{turn = DefenderTurn} = battle{turn = AttackerTurn, selectedAttack = 0}
 swapTurn battle@Battle{turn = AttackerTurn} = battle{turn = DefenderTurn, selectedAttack = 0}
 
-swapDefender :: Human -> Battle -> Battle
-swapDefender human battle = battle {defender = human}
+swapDefender :: Int -> Battle -> Battle
+swapDefender selectedIdx battle = battle {bSelectedDefender = selectedIdx}
 
 isMovementDone :: Move -> Bool
 isMovementDone (Done _) = True
@@ -380,7 +399,7 @@ genesis gen = World {
         asFatVegan = scale 4.7 4.7 $ png "./assets/fat-vegan.png",
         asNutMilker = scale 4.7 4.7 $ png "./assets/nut-milker.png"
     },
-    defenders = [defaultDefender],
+    defenders = [defaultDefender, fatVegan],
     battle = Nothing,
     cow = Cow {
         movement = Done (10, 10),
@@ -483,7 +502,7 @@ drawMenuScreenWithDefendersMenu options = drawMenuScreenWithBattleMenuLabels (ma
 
 drawFullBattleScreenWithAnnouncement :: Assets -> Battle -> [String] -> Picture
 drawFullBattleScreenWithAnnouncement assets battle msgs =
-    let defending = defender battle
+    let defending = getSelectedDefender battle
         attacking = attacker battle
     in pictures [
             drawMenuScreenWithAnnouncement msgs,
@@ -501,7 +520,7 @@ drawBattleChallenge assets attacker = pictures [
 
 drawBattleAttackChoose :: Assets -> Battle -> Picture
 drawBattleAttackChoose assets battle =
-    let defending = defender battle
+    let defending = getSelectedDefender battle
         attacking = attacker battle
     in pictures [
             drawMenuScreen battle,
@@ -519,7 +538,7 @@ drawBattleDamageAnnounce assets battle Attack{attName, damage} = drawFullBattleS
 
 drawBattleDefenderVictor :: Assets -> Battle -> Human -> Picture
 drawBattleDefenderVictor assets battle Human{hName} =
-    let defending = defender battle
+    let defending = getSelectedDefender battle
         attacking = attacker battle
     in pictures [
             drawMenuScreenWithAnnouncement [hName ++ " has been defeated"],
@@ -529,7 +548,7 @@ drawBattleDefenderVictor assets battle Human{hName} =
 
 drawBattleAttackerVictor :: Assets -> Battle -> Human -> Picture
 drawBattleAttackerVictor assets battle Human{hName} =
-    let defending = defender battle
+    let defending = getSelectedDefender battle
         attacking = attacker battle
     in pictures [
             drawMenuScreenWithAnnouncement ["You have been defeated by ", hName ++ "!"],
@@ -539,7 +558,7 @@ drawBattleAttackerVictor assets battle Human{hName} =
 
 drawBattleMenu :: Assets -> Battle -> [BattleMenuOption] -> Int -> Picture
 drawBattleMenu assets battle options selectedIdx =
-    let defending = defender battle
+    let defending = getSelectedDefender battle
         attacking = attacker battle
     in pictures [
             drawMenuScreenWithBattleMenu options selectedIdx,
@@ -561,7 +580,7 @@ drawBattleConvertState World{assets} battle state
 
 drawChooseDefenderMenu :: World -> [Human] -> Int -> Picture
 drawChooseDefenderMenu World{battle = Just battle, assets} options selectedIdx =
-    let defending = defender battle
+    let defending = getSelectedDefender battle
         attacking = attacker battle
     in pictures [
             drawMenuScreenWithDefendersMenu options selectedIdx,
@@ -610,10 +629,10 @@ handleBattleSelectionInput (EventKey (Char 'w') GlossKey.Up _ _) world@World{bat
     | selectedAttack battle > 0 = world {battle = Just $ battle {selectedAttack = selectedAttack battle - 1}}
     | otherwise = world
 handleBattleSelectionInput (EventKey (Char 's') GlossKey.Up _ _) world@World{battle = (Just battle)}
-    | selectedAttack battle < (length . attacks $ defender battle) - 1 = world {battle = Just $ battle {selectedAttack = selectedAttack battle + 1}}
+    | selectedAttack battle < (length . attacks $ getSelectedDefender battle) - 1 = world {battle = Just $ battle {selectedAttack = selectedAttack battle + 1}}
     | otherwise = world
 handleBattleSelectionInput (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = (Just battle)} =
-    world {battle = Just $ battle {bState = AnnounceAttack (defender battle) (getSelectedAttack battle)}}
+    world {battle = Just $ battle {bState = AnnounceAttack (getSelectedDefender battle) (getSelectedAttack battle)}}
 handleBattleSelectionInput (EventKey (Char 'm') GlossKey.Up _ _) world@World{battle = Just battle} = world {
     battle = Just $ battle {bState = BattleMenuOpen [ContinueBattle, ConvertAttacker, ChooseDefender] 0}
 }
@@ -639,7 +658,7 @@ handleBattleDamageAnnounce (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) worl
                 }
 handleBattleDamageAnnounce (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = Just battle@Battle{bState = AnnounceDamage attack, turn = AttackerTurn}} =
     let battle' = applyAttackToBattle attack battle
-        won = hitPoints (defender battle') == 0
+        won = hitPoints (getSelectedDefender battle') == 0
     in if won
         then world {battle = Just $ battle' {bState = AttackerVictor (attacker battle')}}
         else world {battle = Just . swapTurn $ battle' {bState = DefenderAttackChoose}}
@@ -698,7 +717,7 @@ handleDefenderMenuInput event world@World{gen, battle = Just battle@Battle{attac
         let (attackerAttack, gen') = getRandomAttack gen attacker
         in world {
                 gen = gen',
-                battle = Just . swapTurn . swapDefender (options !! selectedIdx) $ battle {bState = AnnounceAttack attacker attackerAttack}
+                battle = Just . swapTurn . swapDefender selectedIdx $ battle {bState = AnnounceAttack attacker attackerAttack}
             }
     | EventKey (Char 'w') GlossKey.Up _ _ <- event,
       selectedIdx > 0 = world {battle = Just battle {bState = ChooseDefenderMenuOpen options (selectedIdx - 1)}}
@@ -737,7 +756,7 @@ updateMovePosition world@World{gen, cow, stepsSinceBattle, defenders} =
                 then worldWithUpdatedCowAndGen {
                         stepsSinceBattle = 0,
                         state = InBattle,
-                        battle = Just $ mkBattle (head defenders) randomAttacker
+                        battle = Just $ mkBattle defenders randomAttacker
                     }
                 else worldWithUpdatedCowAndGen {
                         stepsSinceBattle = stepsSinceBattle'
