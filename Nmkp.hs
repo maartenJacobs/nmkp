@@ -68,11 +68,13 @@ data Turn = DefenderTurn
 
 data BattleMenuOption = ContinueBattle
                       | ConvertAttacker
+                      | ChooseDefender
 
 instance Show BattleMenuOption where
     show :: BattleMenuOption -> String
     show ContinueBattle = "Fight"
     show ConvertAttacker = "Convert"
+    show ChooseDefender = "Defenders"
 
 data ConvertState = ConvertAnnounceAttempt
                   | ConvertAnnouncePokeball
@@ -87,6 +89,7 @@ data BattleState = Challenge Human -- "Attacker name" wants to eat you
                  | AttackerVictor Human -- You have been defeated by "attacker name"!
                  | BattleMenuOpen [BattleMenuOption] Int
                  | Convert ConvertState
+                 | ChooseDefenderMenuOpen [Human] Int
 
 data Battle = Battle {
     turn :: Turn,
@@ -156,59 +159,61 @@ hungryCarnist = mkAttacker "Hungry carnist" 50 asCarnist animalRightsActivist [
         }
     ]
 
+fatVegan :: Human
+fatVegan = mkDefender "Fat vegan" 100 asFatVegan [
+        Attack {
+            attName = "Vegan meals are so cheap",
+            damage = 10
+        },
+        Attack {
+            attName = "Facon 4 lyfe",
+            damage = 10
+        }
+    ]
+
 obeseMan :: Human
-obeseMan =
-    let fatVegan = mkDefender "Fat vegan" 100 asFatVegan [
-                Attack {
-                    attName = "Vegan meals are so cheap",
-                    damage = 10
-                },
-                Attack {
-                    attName = "Facon 4 lyfe",
-                    damage = 10
-                }
-            ]
-    in mkAttacker "Obese man" 100 asObeseMan fatVegan [
-            Attack {
-                attName = "I need 15 meals a day",
-                damage = 10
-            },
-            Attack {
-                attName = "Vegan food is more expensive",
-                damage = 5
-            },
-            Attack {
-                attName = "Vegetables are tasteless",
-                damage = 10
-            }
-        ]
+obeseMan = mkAttacker "Obese man" 100 asObeseMan fatVegan [
+        Attack {
+            attName = "I need 15 meals a day",
+            damage = 10
+        },
+        Attack {
+            attName = "Vegan food is more expensive",
+            damage = 5
+        },
+        Attack {
+            attName = "Vegetables are tasteless",
+            damage = 10
+        }
+    ]
+
+nutMilker :: Human
+nutMilker = mkDefender "Nut milker" 55 asNutMilker [
+        Attack {
+            attName = "Grind nuts",
+            damage = 5
+        },
+        Attack {
+            attName = "Spray mylk",
+            damage = 8
+        }
+    ]
 
 dairyFarmer :: Human
-dairyFarmer =
-    let nutMilker = mkDefender "Nut milker" 55 asNutMilker [
-                Attack {
-                    attName = "Grind nuts",
-                    damage = 5
-                },
-                Attack {
-                    attName = "Spray mylk",
-                    damage = 8
-                }
-            ]
-    in mkAttacker "Dairy farmer" 50 asDairyFarmer nutMilker [
-            Attack {
-                attName = "Nut milk tastes terrible",
-                damage = 15
-            },
-            Attack {
-                attName = "Try milking tiny almond nipples",
-                damage = 5
-            },
-            Attack {
-                attName = "Soy killed me wife",
-                damage = 10
-            }
-        ]
+dairyFarmer = mkAttacker "Dairy farmer" 50 asDairyFarmer nutMilker [
+        Attack {
+            attName = "Nut milk tastes terrible",
+            damage = 15
+        },
+        Attack {
+            attName = "Try milking tiny almond nipples",
+            damage = 5
+        },
+        Attack {
+            attName = "Soy killed me wife",
+            damage = 10
+        }
+    ]
 
 defaultAttackers :: [Human]
 defaultAttackers = [
@@ -258,6 +263,9 @@ applyAttackToBattle attack battle@Battle{turn = AttackerTurn, defender} = battle
 swapTurn :: Battle -> Battle
 swapTurn battle@Battle{turn = DefenderTurn} = battle{turn = AttackerTurn, selectedAttack = 0}
 swapTurn battle@Battle{turn = AttackerTurn} = battle{turn = DefenderTurn, selectedAttack = 0}
+
+swapDefender :: Human -> Battle -> Battle
+swapDefender human battle = battle {defender = human}
 
 isMovementDone :: Move -> Bool
 isMovementDone (Done _) = True
@@ -372,9 +380,7 @@ genesis gen = World {
         asFatVegan = scale 4.7 4.7 $ png "./assets/fat-vegan.png",
         asNutMilker = scale 4.7 4.7 $ png "./assets/nut-milker.png"
     },
-    defenders = [
-        defaultDefender
-    ],
+    defenders = [defaultDefender],
     battle = Nothing,
     cow = Cow {
         movement = Done (10, 10),
@@ -390,7 +396,7 @@ backToField :: World -> World
 backToField world = world {state = InField, battle = Nothing}
 
 addDefender :: Human -> World -> World
-addDefender defender world@World{defenders} = world {defenders = defender : defenders}
+addDefender defender world@World{defenders} = world {defenders = defenders ++ [defender]}
 
 grassBackground :: Picture -> Grid -> [Picture]
 grassBackground grass grid@Grid{..} =
@@ -456,10 +462,9 @@ drawMenuScreenWithAnnouncement msgs =
         translatedMsgs = map (\(idx, msg) -> prepareMsg (-180 - idx * 40) msg) msgsWithIndex
     in pictures (color black (line [(-336, -134), (336, -134)]) : translatedMsgs)
 
-drawMenuScreenWithBattleMenu :: [BattleMenuOption] -> Int -> Picture
-drawMenuScreenWithBattleMenu options selectedIdx =
-    let labels = map show options
-        prepareLabel y = color black . translate 152 y . scale 0.2 0.2 . text
+drawMenuScreenWithBattleMenuLabels :: [String] -> Int -> Picture
+drawMenuScreenWithBattleMenuLabels labels selectedIdx =
+    let prepareLabel y = color black . translate 152 y . scale 0.2 0.2 . text
         labelsWithIndex = zip [0..] labels
         translatedLabels = map (\(idx, label) -> prepareLabel (-180 - idx * 40) label) labelsWithIndex
         selectedOffset = fromIntegral (-170 - selectedIdx * 40)
@@ -469,6 +474,12 @@ drawMenuScreenWithBattleMenu options selectedIdx =
             color black $ line [(112, -134), (112, -336)],
             color black . translate 130 selectedOffset $ thickCircle 0 20
         ]
+
+drawMenuScreenWithBattleMenu :: [BattleMenuOption] -> Int -> Picture
+drawMenuScreenWithBattleMenu options = drawMenuScreenWithBattleMenuLabels (map show options)
+
+drawMenuScreenWithDefendersMenu :: [Human] -> Int -> Picture
+drawMenuScreenWithDefendersMenu options = drawMenuScreenWithBattleMenuLabels (map hName options)
 
 drawFullBattleScreenWithAnnouncement :: Assets -> Battle -> [String] -> Picture
 drawFullBattleScreenWithAnnouncement assets battle msgs =
@@ -548,6 +559,18 @@ drawBattleConvertState World{assets} battle state
         ]
     | ConvertAnnounceFailure <- state = drawFullBattleScreenWithAnnouncement assets battle [hName (attacker battle) ++ " could not be converted"]
 
+drawChooseDefenderMenu :: World -> [Human] -> Int -> Picture
+drawChooseDefenderMenu World{battle = Just battle, assets} options selectedIdx =
+    let defending = defender battle
+        attacking = attacker battle
+    in pictures [
+            drawMenuScreenWithDefendersMenu options selectedIdx,
+            drawDefender assets defending,
+            drawDefenderHP defending,
+            drawAttacker assets attacking,
+            drawAttackerHP attacking
+        ]
+
 drawBattleState :: World -> Picture
 drawBattleState world@World{assets, battle = Just battle}
     | Challenge attacker <- bState battle = drawBattleChallenge assets attacker
@@ -558,6 +581,7 @@ drawBattleState world@World{assets, battle = Just battle}
     | AttackerVictor attacker <- bState battle = drawBattleAttackerVictor assets battle attacker
     | BattleMenuOpen options selectedIdx <- bState battle = drawBattleMenu assets battle options selectedIdx
     | Convert convertState <- bState battle = drawBattleConvertState world battle convertState
+    | ChooseDefenderMenuOpen options selectedIdx <- bState battle = drawChooseDefenderMenu world options selectedIdx
 drawBattleState World{battle = Nothing} = undefined
 
 drawGameOver :: World -> Picture
@@ -591,7 +615,7 @@ handleBattleSelectionInput (EventKey (Char 's') GlossKey.Up _ _) world@World{bat
 handleBattleSelectionInput (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = (Just battle)} =
     world {battle = Just $ battle {bState = AnnounceAttack (defender battle) (getSelectedAttack battle)}}
 handleBattleSelectionInput (EventKey (Char 'm') GlossKey.Up _ _) world@World{battle = Just battle} = world {
-    battle = Just $ battle {bState = BattleMenuOpen [ContinueBattle, ConvertAttacker] 0}
+    battle = Just $ battle {bState = BattleMenuOpen [ContinueBattle, ConvertAttacker, ChooseDefender] 0}
 }
 handleBattleSelectionInput _ world = world
 
@@ -631,11 +655,12 @@ handleBattleAttackerVictor (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) worl
 handleBattleAttackerVictor _ world = world
 
 handleBattleMenuOpen :: Event -> World -> World
-handleBattleMenuOpen event world@World{battle = Just battle@Battle{bState = BattleMenuOpen options selectedIdx}}
+handleBattleMenuOpen event world@World{defenders, battle = Just battle@Battle{bState = BattleMenuOpen options selectedIdx}}
     | EventKey (SpecialKey KeyEnter) GlossKey.Up _ _ <- event =
         case options !! selectedIdx of
             ContinueBattle -> world {battle = Just battle {bState = DefenderAttackChoose}}
             ConvertAttacker -> world {battle = Just battle {bState = Convert ConvertAnnounceAttempt}}
+            ChooseDefender -> world {battle = Just battle {bState = ChooseDefenderMenuOpen defenders 0}}
     | EventKey (Char 'w') GlossKey.Up _ _ <- event,
       selectedIdx > 0 = world {battle = Just battle {bState = BattleMenuOpen options (selectedIdx - 1)}}
     | EventKey (Char 's') GlossKey.Up _ _ <- event,
@@ -667,6 +692,20 @@ handleBattleConvertStateInput ConvertAnnounceFailure event world@World{gen, batt
             }
     | otherwise = world
 
+handleDefenderMenuInput :: Event -> World -> [Human] -> Int -> World
+handleDefenderMenuInput event world@World{gen, battle = Just battle@Battle{attacker}} options selectedIdx
+    | EventKey (SpecialKey KeyEnter) GlossKey.Up _ _ <- event =
+        let (attackerAttack, gen') = getRandomAttack gen attacker
+        in world {
+                gen = gen',
+                battle = Just . swapTurn . swapDefender (options !! selectedIdx) $ battle {bState = AnnounceAttack attacker attackerAttack}
+            }
+    | EventKey (Char 'w') GlossKey.Up _ _ <- event,
+      selectedIdx > 0 = world {battle = Just battle {bState = ChooseDefenderMenuOpen options (selectedIdx - 1)}}
+    | EventKey (Char 's') GlossKey.Up _ _ <- event,
+      selectedIdx < (length options - 1) = world {battle = Just battle {bState = ChooseDefenderMenuOpen options (selectedIdx + 1)}}
+    | otherwise = world
+
 handleBattleInput :: Event -> World -> World
 handleBattleInput event world@World{battle = Just battle}
     | Challenge _ <- bState battle = handleBattleChallengeInput event world
@@ -677,6 +716,7 @@ handleBattleInput event world@World{battle = Just battle}
     | AttackerVictor _ <- bState battle = handleBattleAttackerVictor event world
     | BattleMenuOpen _ _ <- bState battle = handleBattleMenuOpen event world
     | Convert convertState <- bState battle = handleBattleConvertStateInput convertState event world
+    | ChooseDefenderMenuOpen options selectedIdx <- bState battle = handleDefenderMenuInput event world options selectedIdx
 handleBattleInput _ world = world
 
 handleInput :: Event -> World -> World
