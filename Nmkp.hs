@@ -2,6 +2,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE MultiWayIf #-}
 
 import Graphics.Gloss.Game hiding (Up, Down)
 import qualified Graphics.Gloss.Game as GlossKey
@@ -252,6 +253,11 @@ replaceAt as idx a =
 
 getSelectedDefender :: Battle -> Human
 getSelectedDefender Battle{bDefenders, bSelectedDefender} = bDefenders !! bSelectedDefender
+
+removeSelectedDefender :: Battle -> [Human]
+removeSelectedDefender Battle{bDefenders, bSelectedDefender} =
+    let (pre, _ : post) = splitAt bSelectedDefender bDefenders
+    in pre ++ post
 
 getSelectedDefenderAttacks :: Battle -> [Attack]
 getSelectedDefenderAttacks Battle{bDefenders, bSelectedDefender} = attacks (bDefenders !! bSelectedDefender)
@@ -672,9 +678,10 @@ handleBattleDamageAnnounce (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) worl
 handleBattleDamageAnnounce (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) world@World{battle = Just battle@Battle{bState = AnnounceDamage attack, turn = AttackerTurn}} =
     let battle' = applyAttackToBattle attack battle
         won = hitPoints (getSelectedDefender battle') == 0
-    in if won
-        then world {battle = Just $ battle' {bState = AttackerVictor (attacker battle')}}
-        else world {battle = Just . swapTurn $ battle' {bState = DefenderAttackChoose}}
+        remainingDefenders = removeSelectedDefender battle'
+    in if | won && null remainingDefenders  -> world {battle = Just $ battle' {bState = AttackerVictor (attacker battle')}}
+          | won                             -> world {battle = Just . swapTurn $ battle' {bState = DefenderAttackChoose, bSelectedDefender = 0, bDefenders = remainingDefenders}}
+          | otherwise                       -> world {battle = Just . swapTurn $ battle' {bState = DefenderAttackChoose}}
 handleBattleDamageAnnounce _ world = world
 
 handleBattleDefenderVictor :: Event -> World -> World
