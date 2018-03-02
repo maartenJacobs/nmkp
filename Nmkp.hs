@@ -38,14 +38,17 @@ data Human = Human {
     hName :: String,
     maxHitPoints :: Int,
     hitPoints :: Int,
+    hGetAsset :: (Assets -> Picture),
     attacks :: [Attack]
-} deriving (Show)
+}
 
 data Assets = Assets {
     asCow :: Picture,
     asGrass :: Picture,
     asVegan :: Picture,
     asCarnist :: Picture,
+    asDairyFarmer :: Picture,
+    asObeseMan :: Picture,
     asGameOver :: Picture
 }
 
@@ -59,7 +62,6 @@ data BattleState = Challenge Human -- "Attacker name" wants to eat you
                  | AnnounceDamage Attack -- "attack name" inflicted "x" damage
                  | DefenderVictor Human -- "Attacker name" has been defeated
                  | AttackerVictor Human -- You have been defeated by "attacker name"!
-                 deriving (Show)
 
 data Battle = Battle {
     turn :: Turn,
@@ -67,7 +69,7 @@ data Battle = Battle {
     attacker :: Human,
     selectedAttack :: Int,
     bState :: BattleState
-} deriving (Show)
+}
 
 data WorldState = InField
                 | InBattle
@@ -85,41 +87,72 @@ data World = World {
     assets :: Assets
 }
 
-mkHuman :: String -> Int -> [Attack] -> Human
-mkHuman name hitPoints attacks = Human {
+mkHuman :: String -> Int -> (Assets -> Picture) -> [Attack] -> Human
+mkHuman name hitPoints getAsset attacks = Human {
     hName = name,
     maxHitPoints = hitPoints,
     hitPoints = hitPoints,
+    hGetAsset = getAsset,
     attacks = attacks
 }
 
-mkBattle :: Human -> Battle
-mkBattle defender = Battle {
+mkBattle :: Human -> Human -> Battle
+mkBattle defender attacker = Battle {
     turn = DefenderTurn,
     defender = defender,
-    attacker = defaultAttacker,
+    attacker = attacker,
     selectedAttack = 0,
-    bState = Challenge defaultAttacker
+    bState = Challenge attacker
 }
 
-defaultAttacker :: Human
-defaultAttacker = mkHuman "Hungry carnist" 50 [
-        Attack {
-            attName = "Plants have feelings",
-            damage = 15
-        },
-        Attack {
-            attName = "Facon isn't bacon",
-            damage = 5
-        },
-        Attack {
-            attName = "How can I get my protein?",
-            damage = 10
-        }
+defaultAttackers :: [Human]
+defaultAttackers = [
+        mkHuman "Hungry carnist" 50 asCarnist [
+            Attack {
+                attName = "Plants have feelings",
+                damage = 15
+            },
+            Attack {
+                attName = "Facon isn't bacon",
+                damage = 5
+            },
+            Attack {
+                attName = "How can I get my protein?",
+                damage = 10
+            }
+        ],
+        mkHuman "Dairy farmer" 50 asDairyFarmer [
+            Attack {
+                attName = "Nut milk tastes terrible",
+                damage = 15
+            },
+            Attack {
+                attName = "Try milking tiny almond nipples",
+                damage = 5
+            },
+            Attack {
+                attName = "Soy killed me wife",
+                damage = 10
+            }
+        ],
+        mkHuman "Obese man" 100 asObeseMan [
+            Attack {
+                attName = "I need 15 meals a day",
+                damage = 10
+            },
+            Attack {
+                attName = "Vegan food is more expensive",
+                damage = 5
+            },
+            Attack {
+                attName = "Vegetables are tasteless",
+                damage = 10
+            }
+        ]
     ]
 
 defaultDefender :: Human
-defaultDefender = mkHuman "Animal rights activist" 100 [
+defaultDefender = mkHuman "Animal rights activist" 100 asVegan [
         Attack {
             attName = "Vegan pizza",
             damage = 5
@@ -230,10 +263,16 @@ isUnderAttack gen stepsSinceBattle =
         underAttack = luck <= chance
     in (underAttack, gen')
 
+getRandomListItem :: StdGen -> [a] -> (a, StdGen)
+getRandomListItem gen as =
+    let (index, gen') = randomR (0, length as - 1) gen
+    in (as !! index, gen')
+
 getRandomAttack :: StdGen -> Human -> (Attack, StdGen)
-getRandomAttack gen Human{attacks} =
-    let (attackIndex, gen') = randomR (0, length attacks - 1) gen
-    in (attacks !! attackIndex, gen')
+getRandomAttack gen Human{attacks} = getRandomListItem gen attacks
+
+getRandomAttacker :: StdGen -> (Human, StdGen)
+getRandomAttacker gen = getRandomListItem gen defaultAttackers
 
 genesis :: StdGen -> World
 genesis gen = World {
@@ -244,7 +283,9 @@ genesis gen = World {
         asGrass = scale 2 2 $ png "./assets/grass.png",
         asVegan = scale 5.075 5.075 $ png "./assets/vegan.png",
         asCarnist = scale 4.7 4.7 $ png "./assets/carnist.png",
-        asGameOver = png "./assets/gameover.png"
+        asGameOver = png "./assets/gameover.png",
+        asDairyFarmer = scale 4.7 4.7 $ png "./assets/dairy-farmer.png",
+        asObeseMan = scale 4.7 4.7 $ png "./assets/obese-man.png"
     },
     defenders = [
         defaultDefender
@@ -283,13 +324,13 @@ drawHP (x, y) Human{..} =
     ]
 
 drawDefender :: Assets -> Human -> Picture
-drawDefender assets Human{..} = translate (-189) 8 $ asVegan assets
+drawDefender assets Human{..} = translate (-189) 8 $ hGetAsset assets
 
 drawDefenderHP :: Human -> Picture
 drawDefenderHP = drawHP (191, -34)
 
 drawAttacker :: Assets -> Human -> Picture
-drawAttacker assets Human{..} = translate 189 210 $ asCarnist assets
+drawAttacker assets Human{..} = translate 189 210 $ hGetAsset assets
 
 drawAttackerHP :: Human -> Picture
 drawAttackerHP = drawHP (-146, 218)
@@ -471,12 +512,13 @@ updateMovePosition world@World{gen, cow, stepsSinceBattle, defenders} =
         Moving _ 15 _ end                    ->
             let stepsSinceBattle' = stepsSinceBattle + 1
                 (underAttack, gen') = isUnderAttack gen stepsSinceBattle'
-                worldWithUpdatedCowAndGen = world {cow = cow {movement = Done end}, gen = gen'}
+                (randomAttacker, gen'') = getRandomAttacker gen'
+                worldWithUpdatedCowAndGen = world {cow = cow {movement = Done end}, gen = gen''}
             in if underAttack
                 then worldWithUpdatedCowAndGen {
                         stepsSinceBattle = 0,
                         state = InBattle,
-                        battle = Just . mkBattle $ head defenders
+                        battle = Just $ mkBattle (head defenders) randomAttacker
                     }
                 else worldWithUpdatedCowAndGen {
                         stepsSinceBattle = stepsSinceBattle'
