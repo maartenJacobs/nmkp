@@ -7,6 +7,7 @@ import Graphics.Gloss.Game hiding (Up, Down)
 import qualified Graphics.Gloss.Game as GlossKey
 import Prelude hiding (Left, Right)
 import System.Random
+import Data.Tuple (swap)
 
 data Grid = Grid {
     rows :: Int,
@@ -28,13 +29,16 @@ data Move = Start Direction GridPos GridPos
           deriving (Show)
 
 data Cow = Cow {
-    movement :: Move
-} deriving (Show)
+    movement :: Move,
+    cowCurrentAsset :: (Assets -> Picture),
+    cowAssets :: ((Assets -> Picture), (Assets -> Picture)),
+    cowImageFlip :: Int
+}
 
 data Attack = Attack {
     attName :: String,
     damage :: Int
-} deriving (Show)
+}
 
 data Human = Human {
     hName :: String,
@@ -47,6 +51,7 @@ data Human = Human {
 
 data Assets = Assets {
     asCow :: Picture,
+    asCowHeadDown :: Picture,
     asGrass :: Picture,
     asVegan :: Picture,
     asCarnist :: Picture,
@@ -357,6 +362,7 @@ genesis gen = World {
     gen = gen,
     assets = Assets {
         asCow = png "./assets/cow.png",
+        asCowHeadDown = png "./assets/cow-head-down.png",
         asGrass = scale 2 2 $ png "./assets/grass.png",
         asVegan = scale 5.075 5.075 $ png "./assets/vegan.png",
         asCarnist = scale 4.7 4.7 $ png "./assets/carnist.png",
@@ -371,7 +377,10 @@ genesis gen = World {
     ],
     battle = Nothing,
     cow = Cow {
-        movement = Done (10, 10)
+        movement = Done (10, 10),
+        cowCurrentAsset = asCow,
+        cowAssets = (asCowHeadDown, asCow),
+        cowImageFlip = 0
     },
     stepsSinceBattle = 0,
     grid = Grid {rows = 21, columns = 21, displayRatio = 32}
@@ -391,12 +400,14 @@ grassBackground grass grid@Grid{..} =
     in map positionToTranslation displayPositions
 
 drawFieldState :: World -> Picture
-drawFieldState World{..} = pictures (grassBackground (asGrass assets) grid ++ [
-        translate cowX cowY (asCow assets)
-    ])
-    where
-        cowMove = movement cow
+drawFieldState World{..} =
+    let cowMove = movement cow
         (cowX, cowY) = getDisplayPosFromMovement grid cowMove
+        cowAsset = cowCurrentAsset cow
+    in pictures $
+        grassBackground (asGrass assets) grid ++ [
+            translate cowX cowY (cowAsset assets)
+        ]
 
 drawHP :: (Float, Float) -> Human -> Picture
 drawHP (x, y) Human{..} =
@@ -692,6 +703,24 @@ updateMovePosition world@World{gen, cow, stepsSinceBattle, defenders} =
         Moving direction iteration start end -> world {cow = cow {movement = Moving direction (iteration + 1) start end}}
         Done _                               -> world
 
+updateCowImage :: Float -> World -> World
+updateCowImage _ world@World{state, cow = cow@Cow{cowImageFlip, cowAssets}}
+    | InField <- state =
+        let cowImageFlip' = cowImageFlip + 1
+            flipCowImage = cowImageFlip' `mod` 15 == 0
+        in if flipCowImage
+            then world{
+                    cow = cow{
+                        cowCurrentAsset = fst cowAssets,
+                        cowAssets = swap cowAssets,
+                        cowImageFlip = 0
+                    }
+                }
+            else world{
+                    cow = cow{cowImageFlip = cowImageFlip'}
+                }
+    | otherwise = world
+
 updateFieldPosition :: Float -> World -> World
 updateFieldPosition _ world@World{state = InField} = updateMovePosition world
 updateFieldPosition _ world                        = world
@@ -712,4 +741,7 @@ main = do
          world
          draw
          handleInput
-         [updateFieldPosition]
+         [
+             updateFieldPosition,
+             updateCowImage
+         ]
