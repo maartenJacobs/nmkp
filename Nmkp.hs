@@ -274,6 +274,7 @@ drawMenuScreen battle@Battle{..} =
         drawAttack (y, Attack{..}) = color black . translate (-259) y . scale 0.2 0.2 $ text attName
     in pictures $
             map drawAttack attacksAndOffsets ++ [
+                color black $ line [(-336, -134), (336, -134)],
                 -- draw border
                 -- draw selection arrow
                 color black . translate (-307) selectedOffset $ thickCircle 0 20
@@ -282,7 +283,10 @@ drawMenuScreen battle@Battle{..} =
 -- origin point = (0, -235)
 -- size = (672, 202)
 drawMenuScreenWithAnnouncement :: String -> Picture
-drawMenuScreenWithAnnouncement msg = color black . translate (-259) (-180) . scale 0.2 0.2 $ text msg
+drawMenuScreenWithAnnouncement msg = pictures [
+        color black $ line [(-336, -134), (336, -134)],
+        color black . translate (-259) (-180) . scale 0.2 0.2 $ text msg
+    ]
 
 drawFullBattleScreenWithAnnouncement :: Assets -> Battle -> String -> Picture
 drawFullBattleScreenWithAnnouncement assets battle msg =
