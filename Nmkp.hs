@@ -30,8 +30,8 @@ data Move = Start Direction GridPos GridPos
 
 data Cow = Cow {
     movement :: Move,
-    cowCurrentAsset :: (Assets -> Picture),
-    cowAssets :: ((Assets -> Picture), (Assets -> Picture)),
+    cowCurrentAsset :: Assets -> Picture,
+    cowAssets :: (Assets -> Picture, Assets -> Picture),
     cowImageFlip :: Int
 }
 
@@ -44,7 +44,7 @@ data Human = Human {
     hName :: String,
     maxHitPoints :: Int,
     hitPoints :: Int,
-    hGetAsset :: (Assets -> Picture),
+    hGetAsset :: Assets -> Picture,
     attacks :: [Attack],
     convertsTo :: Maybe Human
 }
@@ -123,10 +123,10 @@ mkHuman name hitPoints getAsset convertsTo attacks = Human {
 }
 
 mkDefender :: String -> Int -> (Assets -> Picture) -> [Attack] -> Human
-mkDefender name hitPoints getAsset attacks = mkHuman name hitPoints getAsset Nothing attacks
+mkDefender name hitPoints getAsset = mkHuman name hitPoints getAsset Nothing
 
 mkAttacker :: String -> Int -> (Assets -> Picture) -> Human -> [Attack] -> Human
-mkAttacker name hitPoints getAsset convertsTo attacks = mkHuman name hitPoints getAsset (Just convertsTo) attacks
+mkAttacker name hitPoints getAsset convertsTo = mkHuman name hitPoints getAsset (Just convertsTo)
 
 mkBattle :: Human -> Human -> Battle
 mkBattle defender attacker = Battle {
@@ -454,7 +454,7 @@ drawMenuScreenWithAnnouncement msgs =
     let prepareMsg y = color black . translate (-300) y . scale 0.2 0.2 . text
         msgsWithIndex = zip [0..] msgs
         translatedMsgs = map (\(idx, msg) -> prepareMsg (-180 - idx * 40) msg) msgsWithIndex
-    in pictures $ (color black $ line [(-336, -134), (336, -134)]) : translatedMsgs
+    in pictures (color black (line [(-336, -134), (336, -134)]) : translatedMsgs)
 
 drawMenuScreenWithBattleMenu :: [BattleMenuOption] -> Int -> Picture
 drawMenuScreenWithBattleMenu options selectedIdx =
@@ -484,7 +484,7 @@ drawFullBattleScreenWithAnnouncement assets battle msgs =
 
 drawBattleChallenge :: Assets -> Human -> Picture
 drawBattleChallenge assets attacker = pictures [
-        drawMenuScreenWithAnnouncement [(hName attacker ++ " wants to eat you")],
+        drawMenuScreenWithAnnouncement [hName attacker ++ " wants to eat you"],
         drawAttacker assets attacker
     ]
 
@@ -540,13 +540,13 @@ drawBattleMenu assets battle options selectedIdx =
 
 drawBattleConvertState :: World -> Battle -> ConvertState -> Picture
 drawBattleConvertState World{assets} battle state
-    | ConvertAnnounceAttempt <- state = drawFullBattleScreenWithAnnouncement assets battle ["You try to convert " ++ (hName $ attacker battle)]
-    | ConvertAnnouncePokeball <- state = drawFullBattleScreenWithAnnouncement assets battle ["You throw vegan propaganda at " ++ (hName $ attacker battle)]
+    | ConvertAnnounceAttempt <- state = drawFullBattleScreenWithAnnouncement assets battle ["You try to convert " ++ hName (attacker battle)]
+    | ConvertAnnouncePokeball <- state = drawFullBattleScreenWithAnnouncement assets battle ["You throw vegan propaganda at " ++ hName (attacker battle)]
     | ConvertAnnounceSuccess newDefender <- state = drawFullBattleScreenWithAnnouncement assets battle [
-            "You have converted " ++ (hName $ attacker battle),
+            "You have converted " ++ hName (attacker battle),
             "  to " ++ hName newDefender
         ]
-    | ConvertAnnounceFailure <- state = drawFullBattleScreenWithAnnouncement assets battle [(hName $ attacker battle) ++ " could not be converted"]
+    | ConvertAnnounceFailure <- state = drawFullBattleScreenWithAnnouncement assets battle [hName (attacker battle) ++ " could not be converted"]
 
 drawBattleState :: World -> Picture
 drawBattleState world@World{assets, battle = Just battle}
