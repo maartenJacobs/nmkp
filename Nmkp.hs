@@ -312,18 +312,19 @@ drawMenuScreen battle@Battle{..} =
 
 -- origin point = (0, -235)
 -- size = (672, 202)
-drawMenuScreenWithAnnouncement :: String -> Picture
-drawMenuScreenWithAnnouncement msg = pictures [
-        color black $ line [(-336, -134), (336, -134)],
-        color black . translate (-259) (-180) . scale 0.2 0.2 $ text msg
-    ]
+drawMenuScreenWithAnnouncement :: [String] -> Picture
+drawMenuScreenWithAnnouncement msgs =
+    let prepareMsg y = color black . translate (-300) y . scale 0.2 0.2 . text
+        msgsWithIndex = zip [0..] msgs
+        translatedMsgs = map (\(idx, msg) -> prepareMsg (-180 - idx * 40) msg) msgsWithIndex
+    in pictures $ (color black $ line [(-336, -134), (336, -134)]) : translatedMsgs
 
-drawFullBattleScreenWithAnnouncement :: Assets -> Battle -> String -> Picture
-drawFullBattleScreenWithAnnouncement assets battle msg =
+drawFullBattleScreenWithAnnouncement :: Assets -> Battle -> [String] -> Picture
+drawFullBattleScreenWithAnnouncement assets battle msgs =
     let defending = defender battle
         attacking = attacker battle
     in pictures [
-            drawMenuScreenWithAnnouncement msg,
+            drawMenuScreenWithAnnouncement msgs,
             drawDefender assets defending,
             drawDefenderHP defending,
             drawAttacker assets attacking,
@@ -332,7 +333,7 @@ drawFullBattleScreenWithAnnouncement assets battle msg =
 
 drawBattleChallenge :: Assets -> Human -> Picture
 drawBattleChallenge assets attacker = pictures [
-        drawMenuScreenWithAnnouncement (hName attacker ++ " wants to eat you"),
+        drawMenuScreenWithAnnouncement [(hName attacker ++ " wants to eat you")],
         drawAttacker assets attacker
     ]
 
@@ -349,17 +350,17 @@ drawBattleAttackChoose assets battle =
         ]
 
 drawBattleAttackAnnounce :: Assets -> Battle -> Human -> Attack -> Picture
-drawBattleAttackAnnounce assets battle Human{hName} Attack{attName} = drawFullBattleScreenWithAnnouncement assets battle (hName ++ " uses " ++ attName)
+drawBattleAttackAnnounce assets battle Human{hName} Attack{attName} = drawFullBattleScreenWithAnnouncement assets battle [hName ++ " used", "  " ++ attName]
 
 drawBattleDamageAnnounce :: Assets -> Battle -> Attack -> Picture
-drawBattleDamageAnnounce assets battle Attack{attName, damage} = drawFullBattleScreenWithAnnouncement assets battle (attName ++ " inflicted " ++ show damage)
+drawBattleDamageAnnounce assets battle Attack{attName, damage} = drawFullBattleScreenWithAnnouncement assets battle [attName, "  inflicted " ++ show damage]
 
 drawBattleDefenderVictor :: Assets -> Battle -> Human -> Picture
 drawBattleDefenderVictor assets battle Human{hName} =
     let defending = defender battle
         attacking = attacker battle
     in pictures [
-            drawMenuScreenWithAnnouncement (hName ++ " has been defeated"),
+            drawMenuScreenWithAnnouncement [hName ++ " has been defeated"],
             drawDefender assets defending,
             drawAttacker assets attacking
         ]
@@ -369,7 +370,7 @@ drawBattleAttackerVictor assets battle Human{hName} =
     let defending = defender battle
         attacking = attacker battle
     in pictures [
-            drawMenuScreenWithAnnouncement ("You have been defeated by " ++ hName ++ "!"),
+            drawMenuScreenWithAnnouncement ["You have been defeated by ", hName ++ "!"],
             drawDefender assets defending,
             drawAttacker assets attacking
         ]
@@ -424,7 +425,7 @@ handleBattleDamageAnnounce (EventKey (SpecialKey KeyEnter) GlossKey.Up _ _) worl
         attacker' = attacker battle'
         won = hitPoints attacker' == 0
     in if won
-        then world {battle = Just $ battle' {bState = DefenderVictor (defender battle')}}
+        then world {battle = Just $ battle' {bState = DefenderVictor (attacker battle')}}
         else
             let (attackerAttack, gen') = getRandomAttack gen attacker'
             in world {
