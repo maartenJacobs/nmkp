@@ -4,6 +4,8 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE MultiWayIf #-}
 
+module Nmkp (playNmkp) where
+
 import Graphics.Gloss.Game hiding (Up, Down)
 import qualified Graphics.Gloss.Game as GlossKey
 import Prelude hiding (Left, Right)
@@ -840,8 +842,8 @@ windowHeight Grid{..} = rows * displayRatio
 windowWidth :: Grid -> Int
 windowWidth Grid{..} = columns * displayRatio
 
-main :: IO ()
-main = do
+playNmkp :: IO ()
+playNmkp = do
     gen <- getStdGen
     let world@World{grid} = genesis gen
     play (InWindow "Nmkp / Graze Fighter / Plants vs Carnists" (windowWidth grid, windowHeight grid) (0, 0))

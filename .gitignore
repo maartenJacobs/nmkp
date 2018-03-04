@@ -1,4 +1,4 @@
-*.o
-*.hi
+.stack-work/
+nmkp.cabal
+*~
 log.md
-Nmkp

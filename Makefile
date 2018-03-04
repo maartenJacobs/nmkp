@@ -1,11 +1,11 @@
-run: build
-	./Nmkp
+install: build
+	stack install
 
-build: Nmkp.hs assets/cow.png assets/grass.png
-	# https://functor.tokyo/blog/2017-07-28-ghc-warnings-you-should-enable
-	ghc -O2 -Wall -Wincomplete-uni-patterns -Wincomplete-record-updates -threaded Nmkp.hs
+run: build
+	stack exec nmkp
+
+build:
+	stack build
+
 lint:
 	hlint -g
-
-clean:
-	rm -f Nmkp Nmkp-dev Nmkp.hi Nmkp.o
