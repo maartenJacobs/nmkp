@@ -11,6 +11,7 @@ import qualified Graphics.Gloss.Game as GlossKey
 import Prelude hiding (Left, Right)
 import System.Random
 import Data.Tuple (swap)
+import Linear (V2(..))
 
 data Grid = Grid {
     rows :: Int,
@@ -18,7 +19,7 @@ data Grid = Grid {
     displayRatio :: Int
 } deriving (Show)
 
-type GridPos = (Int, Int)
+type GridPos = V2 Int
 
 data Direction = Down
                | Up
@@ -306,18 +307,24 @@ getGridPosFromMove (Done pos) = pos
 
 atEdgeOfGrid :: Grid -> Move -> Bool
 atEdgeOfGrid Grid{rows, columns} movement =
-    let (x, y) = getGridPosFromMove movement
+    let V2 x y = getGridPosFromMove movement
     in x == 0 || y == 0 || x == (columns - 1) || y == (rows - 1)
 
 getNextGridPos :: Move -> Direction -> GridPos
-getNextGridPos movement direction =
-    applyOffsetFromDirection direction 1 (getGridPosFromMove movement)
+getNextGridPos movement direction = (getGridPosFromMove movement) + (directionToVector direction)
+
+directionToVector :: Num a => Direction -> V2 a
+directionToVector Up    = V2 0 (-1)
+directionToVector Down  = V2 0 1
+directionToVector Left  = V2 (-1) 0
+directionToVector Right = V2 1 0
+
+vectorToPoint :: V2 a -> (a, a)
+vectorToPoint (V2 x y) = (x, y)
 
 applyOffsetFromDirection :: Num a => Direction -> a -> (a, a) -> (a, a)
-applyOffsetFromDirection Up offset (x, y) = (x, y - offset)
-applyOffsetFromDirection Down offset (x, y) = (x, y + offset)
-applyOffsetFromDirection Left offset (x, y) = (x - offset, y)
-applyOffsetFromDirection Right offset (x, y) = (x + offset, y)
+applyOffsetFromDirection direction offset (x, y) =
+    vectorToPoint (V2 x y + pure offset * directionToVector direction)
 
 getDisplayPosFromMovement :: Grid -> Move -> Point
 getDisplayPosFromMovement grid                    (Start _ start _) = gridToDisplayPos grid start
@@ -332,7 +339,7 @@ getDisplayPosFromMovement grid@Grid{displayRatio} (Moving direction iteration st
     in applyOffsetFromDirection direction displayOffset gridPositionInDisplay
 
 gridToDisplayPos :: Grid -> GridPos -> Point
-gridToDisplayPos Grid{..} (x, y) = (fromIntegral x', fromIntegral y')
+gridToDisplayPos Grid{..} (V2 x y) = (fromIntegral x', fromIntegral y')
     where
         x' = (-displayRatio * columns `div` 2) + x * displayRatio + displayRatio `div` 2
         y' = (displayRatio * rows `div` 2) - y * displayRatio - displayRatio `div` 2
@@ -411,7 +418,7 @@ genesis gen = World {
     defenders = [defaultDefender],
     battle = Nothing,
     cow = Cow {
-        movement = Done (10, 10),
+        movement = Done (V2 10 10),
         cowCurrentAsset = asCow,
         cowAssets = (asCowHeadDown, asCow),
         cowImageFlip = 0
@@ -428,7 +435,7 @@ addDefender defender world@World{defenders} = world {defenders = defenders ++ [d
 
 grassBackground :: Picture -> Grid -> [Picture]
 grassBackground grass grid@Grid{..} =
-    let gridPositions = [(x, y) | x <- [0..(columns - 1)], y <- [0..(rows - 1)]]
+    let gridPositions = [V2 x y | x <- [0..(columns - 1)], y <- [0..(rows - 1)]]
         displayPositions = map (gridToDisplayPos grid) gridPositions
         positionToTranslation (x, y) = translate x y grass
     in map positionToTranslation displayPositions

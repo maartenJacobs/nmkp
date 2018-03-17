@@ -23,6 +23,7 @@ library:
   - gloss
   - gloss-game
   - random
+  - linear
 
 executables:
   nmkp:
